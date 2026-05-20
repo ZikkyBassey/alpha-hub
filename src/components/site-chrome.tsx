@@ -44,7 +44,7 @@ export function SiteHeader() {
             <div className="size-1.5 rounded-full bg-primary animate-pulse-dot" />
             <span className="text-[10px] font-mono text-primary uppercase font-bold tracking-widest">Market Open</span>
           </div>
-          {!loading && user ? (
+          {!loading && user && (
             <>
               <Link to="/admin" className="px-3 py-2 text-[11px] font-mono font-bold uppercase tracking-widest border border-border hover:border-primary hover:text-primary transition-colors">
                 Admin
@@ -56,10 +56,6 @@ export function SiteHeader() {
                 Sign out
               </button>
             </>
-          ) : (
-            <Link to="/auth" className="px-4 py-2 bg-primary text-primary-foreground text-[11px] font-mono font-bold uppercase tracking-widest hover:brightness-110">
-              Access Terminal
-            </Link>
           )}
         </div>
       </div>
