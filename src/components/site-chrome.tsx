@@ -30,8 +30,8 @@ export function SiteHeader() {
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-8">
-          <Link to="/" className="font-mono font-bold text-lg tracking-tighter text-primary">
-            CRYPGUYKY<span className="text-foreground">.SYS</span>
+          <Link to="/" className="font-mono font-bold text-lg tracking-tighter text-primary text-glow">
+            CRYPGUYKY
           </Link>
           <nav className="hidden md:flex gap-6 text-xs font-mono uppercase tracking-widest text-muted-foreground">
             <Link to="/calls" className="hover:text-primary transition-colors" activeProps={{ className: "text-primary" }}>Signals</Link>
@@ -67,8 +67,8 @@ export function SiteFooter() {
   return (
     <footer className="py-12 px-6 border-t border-border mt-24">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="font-mono font-bold text-sm tracking-tighter text-muted-foreground">
-          CRYPGUYKY<span className="text-primary">.SYS</span>
+        <div className="font-mono font-bold text-sm tracking-tighter text-primary text-glow">
+          CRYPGUYKY
         </div>
         <div className="flex gap-8 text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
           <Link to="/calls" className="hover:text-primary">Signals</Link>
