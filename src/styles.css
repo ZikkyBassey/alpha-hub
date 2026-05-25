@@ -4,8 +4,6 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* CrypGuyKy — Terminal Alpha design system */
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -41,46 +39,52 @@
 
 @layer base {
   :root {
-    /* Forced dark — no light theme */
-    --background: oklch(0.09 0.008 250);
-    --foreground: oklch(0.96 0.005 80);
-    --surface: oklch(0.13 0.012 250);
-    --card: oklch(0.13 0.012 250);
-    --card-foreground: oklch(0.96 0.005 80);
-    --popover: oklch(0.13 0.012 250);
-    --popover-foreground: oklch(0.96 0.005 80);
-    --primary: oklch(0.78 0.12 85); /* gold */
-    --primary-foreground: oklch(0.10 0.01 250);
-    --secondary: oklch(0.22 0.04 250);
-    --secondary-foreground: oklch(0.98 0.005 250);
-    --muted: oklch(0.22 0.04 250);
-    --muted-foreground: oklch(0.65 0.02 250);
-    --accent: oklch(0.78 0.12 85);
-    --accent-foreground: oklch(0.10 0.01 250);
-    --destructive: oklch(0.65 0.22 25);
-    --destructive-foreground: oklch(0.98 0.005 250);
-    --border: oklch(0.78 0.12 85 / 0.2);
-    --input: oklch(0.22 0.04 250);
-    --ring: oklch(0.78 0.12 85);
-    --bull: oklch(0.78 0.12 85);
-    --bear: oklch(0.65 0.22 25);
+    --background: oklch(0.07 0.010 255);
+    --foreground: oklch(0.97 0.004 80);
+    --surface: oklch(0.11 0.014 255);
+    --surface-2: oklch(0.14 0.016 255);
+    --card: oklch(0.11 0.014 255);
+    --card-foreground: oklch(0.97 0.004 80);
+    --popover: oklch(0.11 0.014 255);
+    --popover-foreground: oklch(0.97 0.004 80);
+    --primary: oklch(0.80 0.14 82);
+    --primary-foreground: oklch(0.08 0.01 255);
+    --secondary: oklch(0.20 0.04 255);
+    --secondary-foreground: oklch(0.98 0.005 255);
+    --muted: oklch(0.20 0.04 255);
+    --muted-foreground: oklch(0.58 0.025 255);
+    --accent: oklch(0.80 0.14 82);
+    --accent-foreground: oklch(0.08 0.01 255);
+    --destructive: oklch(0.62 0.22 25);
+    --destructive-foreground: oklch(0.98 0.005 255);
+    --border: oklch(0.80 0.14 82 / 0.14);
+    --border-subtle: oklch(0.80 0.14 82 / 0.07);
+    --input: oklch(0.20 0.04 255);
+    --ring: oklch(0.80 0.14 82);
+    --bull: oklch(0.80 0.14 82);
+    --bear: oklch(0.62 0.22 25);
   }
 
-  * {
-    border-color: var(--color-border);
-  }
+  * { border-color: var(--color-border); }
 
   html, body {
     background-color: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   ::selection {
-    background-color: var(--color-primary);
-    color: var(--color-primary-foreground);
+    background-color: oklch(0.80 0.14 82 / 0.3);
+    color: var(--color-foreground);
   }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: oklch(0.80 0.14 82 / 0.2); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: oklch(0.80 0.14 82 / 0.4); }
 }
 
 @layer utilities {
@@ -90,33 +94,81 @@
   .bg-bull { background-color: var(--bull); }
   .bg-bear { background-color: var(--bear); }
   .border-bull { border-color: var(--bull); }
+
+  /* Fine dot grid */
   .grid-bg {
-    background-image:
-      linear-gradient(to right, oklch(0.25 0.03 250 / 0.3) 1px, transparent 1px),
-      linear-gradient(to bottom, oklch(0.25 0.03 250 / 0.3) 1px, transparent 1px);
-    background-size: 60px 60px;
+    background-image: radial-gradient(oklch(0.80 0.14 82 / 0.12) 1px, transparent 1px);
+    background-size: 28px 28px;
   }
+
   .text-glow {
-    text-shadow: 0 0 32px color-mix(in oklab, var(--primary) 60%, transparent),
-                 0 0 8px color-mix(in oklab, var(--primary) 30%, transparent);
+    text-shadow:
+      0 0 40px oklch(0.80 0.14 82 / 0.5),
+      0 0 12px oklch(0.80 0.14 82 / 0.25);
   }
-  .gold-border {
-    border-image: linear-gradient(135deg, oklch(0.78 0.12 85), oklch(0.60 0.08 85), oklch(0.78 0.12 85)) 1;
+
+  /* Gold gradient top border on cards */
+  .card-gold-top {
+    position: relative;
   }
+  .card-gold-top::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, oklch(0.80 0.14 82 / 0.6), transparent);
+  }
+
+  /* Ambient glow blob */
+  .glow-orb {
+    background: radial-gradient(ellipse at center, oklch(0.80 0.14 82 / 0.08) 0%, transparent 70%);
+  }
+
+  /* Noise overlay */
+  .noise::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    opacity: 0.4;
+  }
+
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }
 
 @keyframes scanline {
   0% { transform: translateY(-100%); }
-  100% { transform: translateY(100%); }
+  100% { transform: translateY(100vh); }
 }
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.3; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
 }
 @keyframes reveal-up {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(16px); }
   to { opacity: 1; transform: translateY(0); }
 }
-.animate-scanline { animation: scanline 8s linear infinite; }
-.animate-pulse-dot { animation: pulse-dot 1.6s ease-in-out infinite; }
-.animate-reveal { animation: reveal-up 0.6s cubic-bezier(0.19,1,0.22,1) both; }
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+.animate-scanline { animation: scanline 12s linear infinite; }
+.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+.animate-reveal { animation: reveal-up 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-float { animation: float 6s ease-in-out infinite; }
+
+.shimmer-text {
+  background: linear-gradient(90deg, oklch(0.80 0.14 82) 0%, oklch(0.95 0.08 82) 40%, oklch(0.80 0.14 82) 60%, oklch(0.65 0.10 82) 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}

@@ -1,17 +1,18 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { statusStyle, fmtNum, fmtSigned, type TradingCall, type Trader } from "@/lib/calls";
+import { fetchLivePrice } from "@/lib/dex";
 
 export const Route = createFileRoute("/")({
   component: HomePage,
   head: () => ({
     meta: [
-      { title: "CrypGuyKy — Real Alpha. Real Trades. Real PnL." },
-      { name: "description", content: "Live crypto trading calls, verified PnL leaderboard, and transparent desk performance from CrypGuyKy." },
+      { title: "CrypGuyKy — Memecoin Alpha. Real Calls. Real PnL." },
+      { name: "description", content: "Live Solana memecoin calls, verified PnL, and transparent results from CrypGuyKy." },
     ],
   }),
 });
@@ -19,17 +20,11 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
-      {/* CRT scanline overlay */}
-      <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden opacity-[0.04]">
-        <div className="w-full h-32 bg-primary animate-scanline" />
-      </div>
-
       <SiteHeader />
       <Hero />
       <StatsBar />
       <LiveCallsSection />
       <LeaderboardSection />
-      <AboutSection />
       <SubscribeCta />
       <SiteFooter />
     </div>
@@ -38,29 +33,48 @@ function HomePage() {
 
 function Hero() {
   return (
-    <section className="relative py-24 lg:py-32 px-6 border-b border-border overflow-hidden">
-      <div className="absolute inset-0 grid-bg opacity-40 pointer-events-none" />
-      <div className="absolute top-0 right-0 w-1/2 h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none" />
-      <div className="max-w-7xl mx-auto relative">
-        <div className="animate-reveal max-w-4xl">
-          <div className="font-mono text-primary text-xs mb-6 uppercase tracking-[0.3em] flex items-center gap-3">
+    <section className="relative min-h-[88vh] flex items-center py-20 px-4 sm:px-6 overflow-hidden">
+      {/* Background layers */}
+      <div className="absolute inset-0 grid-bg opacity-100 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-transparent to-background pointer-events-none" />
+      {/* Ambient orb */}
+      <div className="absolute top-1/4 right-0 w-[600px] h-[600px] glow-orb pointer-events-none opacity-60" />
+      <div className="absolute bottom-0 left-1/4 w-[400px] h-[400px] glow-orb pointer-events-none opacity-30" />
+
+      <div className="max-w-7xl mx-auto relative w-full">
+        <div className="max-w-3xl">
+          {/* Badge */}
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 border border-primary/25 bg-primary/5 mb-8 animate-reveal">
             <span className="size-1.5 rounded-full bg-primary animate-pulse-dot" />
-            System Status: Bullish
+            <span className="font-mono text-[10px] text-primary uppercase tracking-[0.25em] font-bold">Live Signals Active</span>
           </div>
-          <h1 className="text-5xl sm:text-7xl lg:text-8xl font-black uppercase tracking-tighter leading-[0.9] mb-8">
-            Real Alpha.<br />
-            Real Trades.<br />
-            <span className="text-primary text-glow">Real PnL.</span>
+
+          {/* Headline */}
+          <h1
+            className="font-black uppercase tracking-tighter leading-[0.85] mb-6 animate-reveal"
+            style={{ animationDelay: "80ms", fontSize: "clamp(2.8rem, 8vw, 6rem)" }}
+          >
+            Solana Meme<br />
+            <span className="shimmer-text">Alpha Calls.</span>
           </h1>
-          <p className="text-lg lg:text-xl text-muted-foreground max-w-2xl mb-12 text-pretty">
-            The institutional-grade terminal for high-conviction crypto signals. Verified entries, transparent results, and a leaderboard that doesn't lie.
+
+          <p className="text-base sm:text-lg text-muted-foreground max-w-lg mb-10 leading-relaxed animate-reveal" style={{ animationDelay: "160ms" }}>
+            High-conviction memecoin signals with verified entries, live PnL tracking, and zero fluff.
           </p>
-          <div className="flex flex-wrap gap-4 items-center">
-            <Link to="/calls" className="px-8 py-4 bg-primary text-primary-foreground font-black uppercase tracking-[0.15em] text-xs hover:scale-[1.02] transition-transform">
-              View Live Signals
+
+          <div className="flex flex-wrap gap-3 animate-reveal" style={{ animationDelay: "240ms" }}>
+            <Link
+              to="/calls"
+              className="group inline-flex items-center gap-2 px-7 py-3.5 bg-primary text-primary-foreground font-black uppercase tracking-[0.12em] text-xs hover:brightness-110 transition-all"
+            >
+              View All Calls
+              <span className="transition-transform group-hover:translate-x-1">→</span>
             </Link>
-            <Link to="/leaderboard" className="px-8 py-4 bg-surface border border-border font-bold uppercase tracking-[0.15em] text-xs hover:border-primary transition-colors">
-              See the Leaderboard
+            <Link
+              to="/leaderboard"
+              className="inline-flex items-center gap-2 px-7 py-3.5 border border-border/80 font-bold uppercase tracking-[0.12em] text-xs hover:border-primary/50 hover:bg-primary/5 transition-all"
+            >
+              Leaderboard
             </Link>
           </div>
         </div>
@@ -86,22 +100,27 @@ function StatsBar() {
   const active = calls?.filter(c => c.status === "ACTIVE").length ?? 0;
 
   return (
-    <section className="border-b border-border bg-surface/30">
-      <div className="max-w-7xl mx-auto px-6 py-12 grid grid-cols-2 lg:grid-cols-4 gap-8">
-        <Stat label="Win Rate" value={`${winRate.toFixed(1)}%`} accent />
-        <Stat label="Avg Closed ROI" value={fmtSigned(avgRoi)} accent />
-        <Stat label="Total Signals" value={`${total}`} />
-        <Stat label="Active Now" value={`${active}`} />
+    <section className="border-y border-border/60 bg-surface/40">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-border/40">
+          <StatCell label="Win Rate" value={`${winRate.toFixed(1)}%`} accent />
+          <StatCell label="Avg ROI" value={fmtSigned(avgRoi)} accent />
+          <StatCell label="Total Calls" value={`${total}`} />
+          <StatCell label="Active Now" value={`${active}`} live />
+        </div>
       </div>
     </section>
   );
 }
 
-function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function StatCell({ label, value, accent, live }: { label: string; value: string; accent?: boolean; live?: boolean }) {
   return (
-    <div>
-      <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-2">{label}</p>
-      <p className={`text-4xl font-black tracking-tight ${accent ? "text-primary" : "text-foreground"}`}>{value}</p>
+    <div className="px-6 py-8 flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        {live && <span className="size-1.5 rounded-full bg-primary animate-pulse-dot" />}
+        <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-muted-foreground">{label}</p>
+      </div>
+      <p className={`text-3xl sm:text-4xl font-black tracking-tight ${accent ? "text-primary" : "text-foreground"}`}>{value}</p>
     </div>
   );
 }
@@ -120,25 +139,29 @@ function LiveCallsSection() {
   });
 
   return (
-    <section className="py-24 px-6">
+    <section className="py-20 px-4 sm:px-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-end mb-12 flex-wrap gap-4">
           <div>
-            <h2 className="text-4xl font-black uppercase tracking-tighter">Live Trading Feed</h2>
-            <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mt-2">Real-time signals from the desk</p>
+            <p className="font-mono text-[9px] text-primary uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+              <span className="size-1 rounded-full bg-primary" />
+              Live feed
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter">Active Calls</h2>
           </div>
-          <Link to="/calls" className="text-xs font-mono uppercase tracking-widest text-primary hover:underline">
-            View all signals →
+          <Link to="/calls" className="group inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+            All signals
+            <span className="transition-transform group-hover:translate-x-1">→</span>
           </Link>
         </div>
 
         {isLoading ? (
-          <div className="grid md:grid-cols-3 gap-6">
-            {[1,2,3].map(i => <div key={i} className="h-64 bg-surface border border-border animate-pulse" />)}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1,2,3].map(i => <div key={i} className="h-64 bg-surface border border-border/60 animate-pulse" />)}
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {calls?.map((c, i) => <CallCard key={c.id} call={c} delay={i * 80} />)}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {calls?.map((c, i) => <CallCard key={c.id} call={c} delay={i * 60} />)}
           </div>
         )}
       </div>
@@ -147,46 +170,96 @@ function LiveCallsSection() {
 }
 
 export function CallCard({ call, delay = 0 }: { call: TradingCall; delay?: number }) {
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!call.contract_address || call.status !== "ACTIVE") return;
+    let cancelled = false;
+    const load = async () => {
+      const p = await fetchLivePrice(call.contract_address!);
+      if (!cancelled) setLivePrice(p);
+    };
+    load();
+    const id = setInterval(load, 30_000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [call.contract_address, call.status]);
+
+  const livePnl = livePrice && call.entry_price
+    ? ((livePrice - Number(call.entry_price)) / Number(call.entry_price)) * 100
+    : null;
+
+  const displayPnl = livePnl ?? (call.pnl_percent !== null ? Number(call.pnl_percent) : null);
+  const isLive = livePnl !== null;
+  const pnlPositive = displayPnl !== null && displayPnl >= 0;
+
+  const riskColor =
+    call.risk_level === "LOW" ? "text-primary border-primary/25 bg-primary/5" :
+    call.risk_level === "MEDIUM" ? "text-yellow-400 border-yellow-400/25 bg-yellow-400/5" :
+    "text-bear border-bear/25 bg-bear/5";
+
   return (
     <div
-      className="bg-surface border border-border p-6 hover:border-primary/50 transition-colors animate-reveal"
+      className="group relative bg-surface border border-border/60 hover:border-primary/30 transition-all duration-300 flex flex-col card-gold-top overflow-hidden"
       style={{ animationDelay: `${delay}ms` }}
     >
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h3 className="text-2xl font-black tracking-tight">{call.pair}</h3>
-          <p className={`font-mono text-[11px] uppercase font-bold tracking-widest mt-1 ${call.direction === "LONG" ? "text-primary" : "text-bear"}`}>
-            {call.direction} {call.leverage ? `• ${call.leverage}` : ""}
+      {/* Hover glow */}
+      <div className="absolute inset-0 bg-gradient-to-b from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+
+      {/* Header */}
+      <div className="px-5 pt-5 pb-4 border-b border-border/40 flex items-start justify-between gap-3 relative">
+        <div className="min-w-0">
+          <p className="text-base font-black tracking-tight truncate mb-0.5">💎 {call.pair}</p>
+          <p className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest">
+            {call.caller ? `by ${call.caller}` : "Solana"}
           </p>
         </div>
-        <span className={`px-2 py-1 text-[10px] font-mono font-bold uppercase tracking-wider border ${statusStyle(call.status)}`}>
+        <span className={`shrink-0 px-2 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border ${statusStyle(call.status)}`}>
           {call.status.replace("_", " ")}
         </span>
       </div>
-      <div className="space-y-3 font-mono text-sm">
-        <Row label="Entry" value={fmtNum(call.entry_price)} />
-        <Row label="Target" value={fmtNum(call.target_price)} valueClass="text-primary" />
-        <Row label="Stop" value={fmtNum(call.stop_loss)} valueClass="text-bear" />
-        {call.pnl_percent !== null && (
-          <Row
-            label="PnL"
-            value={fmtSigned(call.pnl_percent)}
-            valueClass={Number(call.pnl_percent) >= 0 ? "text-primary font-bold" : "text-bear font-bold"}
-          />
-        )}
-      </div>
-      {call.notes && (
-        <p className="mt-6 pt-4 border-t border-border text-xs text-muted-foreground line-clamp-2">{call.notes}</p>
+
+      {/* PnL hero */}
+      {displayPnl !== null && (
+        <div className={`mx-5 mt-4 flex items-center justify-between px-4 py-3 border ${pnlPositive ? "border-primary/20 bg-primary/5" : "border-bear/20 bg-bear/5"}`}>
+          <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground flex items-center gap-1.5">
+            {isLive && <span className="size-1.5 rounded-full bg-primary animate-pulse-dot" />}
+            {isLive ? "Live PnL" : "PnL"}
+          </span>
+          <span className={`font-black text-xl tracking-tight ${pnlPositive ? "text-primary" : "text-bear"}`}>
+            {fmtSigned(displayPnl)}
+          </span>
+        </div>
       )}
+
+      {/* Stats */}
+      <div className="px-5 py-4 flex-1 grid grid-cols-2 gap-x-4 gap-y-3.5">
+        {call.market_cap && <Stat label="Mkt Cap" value={call.market_cap} />}
+        {call.potential && <Stat label="Target" value={call.potential} accent />}
+        {call.entry_zone && <Stat label="Entry Zone" value={call.entry_zone} />}
+        {isLive && livePrice && <Stat label="Live Price" value={fmtNum(livePrice)} accent />}
+        {call.liquidity && <Stat label="Liquidity" value={call.liquidity} />}
+        {call.volume_24h && <Stat label="Vol 24h" value={call.volume_24h} />}
+        {call.ath && <Stat label="ATH" value={call.ath} />}
+      </div>
+
+      {/* Footer */}
+      <div className="px-5 pb-4 flex items-center justify-between">
+        {call.risk_level ? (
+          <span className={`px-2.5 py-1 border text-[9px] font-mono font-bold uppercase tracking-widest ${riskColor}`}>
+            {call.risk_level} RISK
+          </span>
+        ) : <span />}
+        <span className="font-mono text-[8px] text-muted-foreground/30 uppercase tracking-widest">NFA</span>
+      </div>
     </div>
   );
 }
 
-function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
+function Stat({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
   return (
-    <div className="flex justify-between border-b border-border/40 pb-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={`font-bold ${valueClass}`}>{value}</span>
+    <div>
+      <p className="text-[8px] font-mono uppercase tracking-widest text-muted-foreground/70 mb-0.5">{label}</p>
+      <p className={`text-xs font-bold leading-tight ${accent ? "text-primary" : "text-foreground"}`}>{value}</p>
     </div>
   );
 }
@@ -204,51 +277,58 @@ function LeaderboardSection() {
     },
   });
 
+  const medals = ["🥇", "🥈", "🥉"];
+
   return (
-    <section className="py-24 px-6 bg-surface/30 border-y border-border">
+    <section className="py-20 px-4 sm:px-6 border-t border-border/60 bg-surface/20">
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-end mb-12 flex-wrap gap-4">
           <div>
-            <h2 className="text-4xl font-black uppercase tracking-tighter">PnL Leaderboard</h2>
-            <p className="font-mono text-xs text-muted-foreground uppercase tracking-widest mt-2">Top traders by verified ROI</p>
+            <p className="font-mono text-[9px] text-primary uppercase tracking-[0.3em] mb-3 flex items-center gap-2">
+              <span className="size-1 rounded-full bg-primary" />
+              Rankings
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter">PnL Leaderboard</h2>
           </div>
-          <Link to="/leaderboard" className="text-xs font-mono uppercase tracking-widest text-primary hover:underline">
-            Full rankings →
+          <Link to="/leaderboard" className="group inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-widest text-muted-foreground hover:text-primary transition-colors">
+            Full rankings
+            <span className="transition-transform group-hover:translate-x-1">→</span>
           </Link>
         </div>
 
-        <div className="border border-border bg-surface overflow-x-auto">
+        <div className="border border-border/60 bg-surface overflow-hidden">
           <table className="w-full text-left">
-            <thead className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest border-b border-border">
+            <thead className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest border-b border-border/60 bg-background/60">
               <tr>
-                <th className="p-4 w-16">Rank</th>
-                <th className="p-4">Trader</th>
-                <th className="p-4 text-right">Win Rate</th>
-                <th className="p-4 text-right hidden sm:table-cell">Net PnL</th>
-                <th className="p-4 text-right">ROI %</th>
+                <th className="px-5 py-3.5 w-16">#</th>
+                <th className="px-5 py-3.5">Trader</th>
+                <th className="px-5 py-3.5 text-right">Win Rate</th>
+                <th className="px-5 py-3.5 text-right hidden sm:table-cell">Net PnL</th>
+                <th className="px-5 py-3.5 text-right">ROI</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-border/40">
+            <tbody className="divide-y divide-border/30">
               {traders?.map((t) => (
-                <tr key={t.id} className="hover:bg-primary/5 transition-colors">
-                  <td className="p-4 font-mono font-bold">
-                    <span className={t.rank === 1 ? "text-primary" : "text-muted-foreground"}>
-                      {String(t.rank ?? "—").padStart(2, "0")}
-                    </span>
+                <tr key={t.id} className="hover:bg-primary/[0.03] transition-colors group">
+                  <td className="px-5 py-4 font-mono font-bold text-sm">
+                    {t.rank && t.rank <= 3
+                      ? <span className="text-base">{medals[(t.rank ?? 1) - 1]}</span>
+                      : <span className="text-muted-foreground">{String(t.rank ?? "—").padStart(2, "0")}</span>
+                    }
                   </td>
-                  <td className="p-4">
+                  <td className="px-5 py-4">
                     <div className="flex items-center gap-3">
-                      <div className="size-9 rounded bg-background border border-border grid place-items-center font-mono text-xs text-primary font-bold">
+                      <div className="size-8 bg-background border border-border/60 grid place-items-center font-mono text-[10px] text-primary font-bold shrink-0 group-hover:border-primary/40 transition-colors">
                         {t.handle.slice(0, 2).toUpperCase()}
                       </div>
-                      <span className="font-bold uppercase tracking-wide">{t.handle}</span>
+                      <span className="font-bold text-sm uppercase tracking-wide">{t.handle}</span>
                     </div>
                   </td>
-                  <td className="p-4 text-right font-mono">{Number(t.win_rate).toFixed(1)}%</td>
-                  <td className="p-4 text-right font-mono text-primary hidden sm:table-cell">
+                  <td className="px-5 py-4 text-right font-mono text-sm text-muted-foreground">{Number(t.win_rate).toFixed(1)}%</td>
+                  <td className="px-5 py-4 text-right font-mono text-sm text-primary hidden sm:table-cell">
                     +${Number(t.total_pnl).toLocaleString()}
                   </td>
-                  <td className="p-4 text-right font-mono text-primary font-bold">{fmtSigned(t.roi_percent)}</td>
+                  <td className="px-5 py-4 text-right font-mono text-sm text-primary font-black">{fmtSigned(t.roi_percent)}</td>
                 </tr>
               ))}
             </tbody>
@@ -259,59 +339,6 @@ function LeaderboardSection() {
   );
 }
 
-function AboutSection() {
-  return (
-    <section className="py-24 px-6">
-      <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-16 items-center">
-        <div>
-          <p className="font-mono text-xs text-primary uppercase tracking-[0.3em] mb-4">About</p>
-          <h2 className="text-4xl lg:text-5xl font-black uppercase tracking-tighter mb-6 leading-tight">
-            Built by traders.<br /><span className="text-primary">Not influencers.</span>
-          </h2>
-          <p className="text-muted-foreground mb-6 leading-relaxed">
-            CrypGuyKy was forged in the trenches of three full market cycles. We don't sell hope — we publish receipts. Every call is timestamped on entry, every result is verifiable.
-          </p>
-          <ul className="space-y-3 font-mono text-sm">
-            {[
-              "No hidden track record",
-              "Public entries, targets, stops — before the move",
-              "Transparent PnL on every closed trade",
-              "Built for traders who can read a chart",
-            ].map((x) => (
-              <li key={x} className="flex items-center gap-3">
-                <span className="text-primary font-bold">[+]</span>
-                <span className="uppercase tracking-wide">{x}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="relative">
-          <div className="bg-surface border border-border p-8 font-mono text-xs">
-            <div className="text-primary mb-4">{">"} ./desk.stats --live</div>
-            <DataLine k="active_signals" v="6" />
-            <DataLine k="closed_30d" v="42" />
-            <DataLine k="best_call" v="+412%" />
-            <DataLine k="avg_rr_ratio" v="1:4.2" />
-            <DataLine k="account_grow_ytd" v="+1,420%" highlight />
-            <DataLine k="signal_latency" v="< 200ms" />
-            <div className="text-muted-foreground mt-4">{">"} _</div>
-          </div>
-          <div className="absolute -inset-1 -z-10 bg-primary/10 blur-2xl" />
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function DataLine({ k, v, highlight }: { k: string; v: string; highlight?: boolean }) {
-  return (
-    <div className="flex justify-between py-1.5 border-b border-border/40 last:border-0">
-      <span className="text-muted-foreground">{k}</span>
-      <span className={highlight ? "text-primary font-bold" : "text-foreground"}>{v}</span>
-    </div>
-  );
-}
-
 function SubscribeCta() {
   const [email, setEmail] = useState("");
   const m = useMutation({
@@ -319,44 +346,43 @@ function SubscribeCta() {
       const { error } = await supabase.from("subscribers").insert({ email: e });
       if (error) throw error;
     },
-    onSuccess: () => { toast.success("You're on the list. Welcome to the desk."); setEmail(""); },
-    onError: (e: Error) => { toast.error(e.message.includes("duplicate") ? "You're already subscribed." : e.message); },
+    onSuccess: () => { toast.success("You're on the list."); setEmail(""); },
+    onError: (e: Error) => { toast.error(e.message.includes("duplicate") ? "Already subscribed." : e.message); },
   });
 
   return (
-    <section className="py-24 px-6">
-      <div className="max-w-4xl mx-auto text-center">
-        <div className="inline-block mb-8 py-1 px-4 border border-primary text-primary font-mono text-[10px] uppercase tracking-[0.3em] animate-pulse-dot">
-          Enrollment Open
-        </div>
-        <h2 className="text-5xl md:text-6xl font-black uppercase tracking-tighter mb-6">
-          Secure the <span className="text-primary">Alpha.</span>
+    <section className="py-24 px-4 sm:px-6 border-t border-border/60 relative overflow-hidden">
+      <div className="absolute inset-0 glow-orb opacity-40 pointer-events-none" />
+      <div className="max-w-xl mx-auto text-center relative">
+        <p className="font-mono text-[9px] text-primary uppercase tracking-[0.3em] mb-5 flex items-center justify-center gap-2">
+          <span className="size-1 rounded-full bg-primary" />
+          Alerts
+        </p>
+        <h2 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter mb-4">
+          Get Every Call <span className="text-primary">First.</span>
         </h2>
-        <p className="text-muted-foreground text-lg mb-10 max-w-xl mx-auto">
-          Join the desk's signal alerts. Get every trade in your inbox before it moves.
+        <p className="text-muted-foreground text-sm mb-10 leading-relaxed">
+          Signal alerts straight to your inbox before the move.
         </p>
         <form
           onSubmit={(e) => { e.preventDefault(); if (email) m.mutate(email); }}
-          className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto"
+          className="flex gap-0 border border-border/60 focus-within:border-primary/50 transition-colors"
         >
           <input
-            type="email"
-            required
-            value={email}
+            type="email" required value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@yourdomain.com"
-            className="flex-1 bg-surface border border-border px-4 py-3 font-mono text-sm focus:border-primary focus:outline-none"
+            placeholder="your@email.com"
+            className="flex-1 bg-transparent px-4 py-3.5 font-mono text-sm focus:outline-none placeholder:text-muted-foreground/40 min-w-0"
           />
           <button
-            type="submit"
-            disabled={m.isPending}
-            className="px-8 py-3 bg-primary text-primary-foreground font-black uppercase tracking-widest text-xs hover:brightness-110 disabled:opacity-50"
+            type="submit" disabled={m.isPending}
+            className="px-6 py-3.5 bg-primary text-primary-foreground font-black uppercase tracking-widest text-xs hover:brightness-110 disabled:opacity-50 shrink-0 transition-all"
           >
-            {m.isPending ? "..." : "Join"}
+            {m.isPending ? "…" : "Join"}
           </button>
         </form>
-        <p className="mt-6 text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
-          No spam. Unsubscribe anytime. Not financial advice.
+        <p className="mt-4 text-[9px] font-mono text-muted-foreground/40 uppercase tracking-widest">
+          No spam. Not financial advice.
         </p>
       </div>
     </section>

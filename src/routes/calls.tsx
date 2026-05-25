@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader, SiteFooter } from "@/components/site-chrome";
 import { CallCard } from "./index";
@@ -9,13 +10,18 @@ export const Route = createFileRoute("/calls")({
   component: CallsPage,
   head: () => ({
     meta: [
-      { title: "Live Trading Signals — CrypGuyKy" },
-      { name: "description", content: "Browse every live and historical CrypGuyKy trading call with entry, target, stop, and PnL." },
+      { title: "Signals — CrypGuyKy" },
+      { name: "description", content: "Every live and historical CrypGuyKy memecoin call with entry, target, and live PnL." },
     ],
   }),
 });
 
+const FILTERS = ["ALL", "ACTIVE", "TARGET_HIT", "PENDING", "STOPPED"] as const;
+type Filter = typeof FILTERS[number];
+
 function CallsPage() {
+  const [filter, setFilter] = useState<Filter>("ALL");
+
   const { data: calls, isLoading } = useQuery({
     queryKey: ["calls", "all"],
     queryFn: async () => {
@@ -27,31 +33,60 @@ function CallsPage() {
     },
   });
 
+  const filtered = filter === "ALL" ? calls : calls?.filter(c => c.status === filter);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <section className="py-20 px-6 border-b border-border">
-        <div className="max-w-7xl mx-auto">
-          <p className="font-mono text-xs text-primary uppercase tracking-[0.3em] mb-4">/ signals</p>
-          <h1 className="text-5xl md:text-6xl font-black uppercase tracking-tighter">Live Trading Calls</h1>
-          <p className="mt-4 text-muted-foreground max-w-2xl">Every signal, timestamped. Filter by status coming soon.</p>
+
+      {/* Hero */}
+      <section className="relative py-14 sm:py-20 px-4 sm:px-6 border-b border-border/60 overflow-hidden">
+        <div className="absolute inset-0 grid-bg opacity-60 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background pointer-events-none" />
+        <div className="max-w-7xl mx-auto relative">
+          <p className="font-mono text-[9px] text-primary uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+            <span className="size-1 rounded-full bg-primary" />
+            Signals
+          </p>
+          <h1 className="text-4xl sm:text-5xl font-black uppercase tracking-tighter">All Calls</h1>
         </div>
       </section>
-      <section className="py-16 px-6">
+
+      <section className="py-10 px-4 sm:px-6">
         <div className="max-w-7xl mx-auto">
+          {/* Filter tabs */}
+          <div className="flex gap-1.5 flex-wrap mb-10">
+            {FILTERS.map(f => (
+              <button key={f} onClick={() => setFilter(f)}
+                className={`px-3.5 py-2 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
+                  filter === f
+                    ? "border-primary/60 text-primary bg-primary/8"
+                    : "border-border/60 text-muted-foreground hover:text-foreground hover:border-border"
+                }`}>
+                {f.replace("_", " ")}
+                {f !== "ALL" && calls && (
+                  <span className="ml-1.5 opacity-40">{calls.filter(c => c.status === f).length}</span>
+                )}
+              </button>
+            ))}
+          </div>
+
           {isLoading ? (
-            <div className="grid md:grid-cols-3 gap-6">
-              {[1,2,3,4,5,6].map(i => <div key={i} className="h-64 bg-surface border border-border animate-pulse" />)}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {[1,2,3,4,5,6].map(i => <div key={i} className="h-64 bg-surface border border-border/60 animate-pulse" />)}
             </div>
-          ) : calls && calls.length ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {calls.map((c, i) => <CallCard key={c.id} call={c} delay={i * 50} />)}
+          ) : filtered?.length ? (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filtered.map((c, i) => <CallCard key={c.id} call={c} delay={i * 40} />)}
             </div>
           ) : (
-            <p className="text-center text-muted-foreground py-20">No signals yet.</p>
+            <div className="py-24 text-center">
+              <p className="text-muted-foreground font-mono text-sm">No calls found.</p>
+            </div>
           )}
         </div>
       </section>
+
       <SiteFooter />
     </div>
   );

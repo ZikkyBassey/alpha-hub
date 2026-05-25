@@ -21,12 +21,18 @@ export function statusStyle(status: string) {
   }
 }
 
-export function fmtNum(n: number | null | undefined, digits = 2) {
+export function fmtNum(n: number | null | undefined, digits?: number) {
   if (n === null || n === undefined) return "—";
-  return Number(n).toLocaleString(undefined, {
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  });
+  const v = Number(n);
+  if (digits !== undefined) {
+    return v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  }
+  // Auto-scale precision for small memecoin prices
+  if (v !== 0 && Math.abs(v) < 0.01) {
+    const sig = Math.max(2, -Math.floor(Math.log10(Math.abs(v))) + 2);
+    return v.toLocaleString(undefined, { minimumFractionDigits: sig, maximumFractionDigits: sig });
+  }
+  return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 export function fmtSigned(n: number | null | undefined) {

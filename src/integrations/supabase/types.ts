@@ -112,49 +112,97 @@ export type Database = {
       }
       trading_calls: {
         Row: {
+          ath: string | null
+          bullish_reasons: string[] | null
+          caller: string | null
+          contract_address: string | null
           created_at: string
           created_by: string | null
           direction: string
           entry_price: number
+          entry_zone: string | null
+          holders: string | null
           id: string
           leverage: string | null
+          liquidity: string | null
+          market_cap: string | null
+          narrative: string | null
           notes: string | null
           pair: string
           pnl_percent: number | null
+          potential: string | null
+          risk_level: string | null
           status: string
           stop_loss: number | null
+          strategy: string | null
           target_price: number | null
+          telegram: string | null
+          twitter: string | null
           updated_at: string
+          volume_24h: string | null
+          website: string | null
         }
         Insert: {
+          ath?: string | null
+          bullish_reasons?: string[] | null
+          caller?: string | null
+          contract_address?: string | null
           created_at?: string
           created_by?: string | null
           direction: string
           entry_price: number
+          entry_zone?: string | null
+          holders?: string | null
           id?: string
           leverage?: string | null
+          liquidity?: string | null
+          market_cap?: string | null
+          narrative?: string | null
           notes?: string | null
           pair: string
           pnl_percent?: number | null
+          potential?: string | null
+          risk_level?: string | null
           status?: string
           stop_loss?: number | null
+          strategy?: string | null
           target_price?: number | null
+          telegram?: string | null
+          twitter?: string | null
           updated_at?: string
+          volume_24h?: string | null
+          website?: string | null
         }
         Update: {
+          ath?: string | null
+          bullish_reasons?: string[] | null
+          caller?: string | null
+          contract_address?: string | null
           created_at?: string
           created_by?: string | null
           direction?: string
           entry_price?: number
+          entry_zone?: string | null
+          holders?: string | null
           id?: string
           leverage?: string | null
+          liquidity?: string | null
+          market_cap?: string | null
+          narrative?: string | null
           notes?: string | null
           pair?: string
           pnl_percent?: number | null
+          potential?: string | null
+          risk_level?: string | null
           status?: string
           stop_loss?: number | null
+          strategy?: string | null
           target_price?: number | null
+          telegram?: string | null
+          twitter?: string | null
           updated_at?: string
+          volume_24h?: string | null
+          website?: string | null
         }
         Relationships: []
       }

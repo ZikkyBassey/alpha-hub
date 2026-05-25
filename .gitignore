@@ -43,3 +43,5 @@ __pycache__/
 # Session files
 session.session
 session.session-journal
+.vercel
+.env*.local

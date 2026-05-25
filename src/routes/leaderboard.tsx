@@ -14,6 +14,8 @@ export const Route = createFileRoute("/leaderboard")({
   }),
 });
 
+const medals = ["🥇", "🥈", "🥉"];
+
 function LeaderboardPage() {
   const { data: traders } = useQuery({
     queryKey: ["traders", "all"],
@@ -26,50 +28,75 @@ function LeaderboardPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <section className="py-20 px-6 border-b border-border">
-        <div className="max-w-7xl mx-auto">
-          <p className="font-mono text-xs text-primary uppercase tracking-[0.3em] mb-4">/ leaderboard</p>
-          <h1 className="text-5xl md:text-6xl font-black uppercase tracking-tighter">Elite Traders</h1>
-          <p className="mt-4 text-muted-foreground max-w-2xl">Ranked by verified ROI over the active season.</p>
+
+      {/* Hero */}
+      <section className="relative py-16 sm:py-24 px-4 sm:px-6 border-b border-border/60 overflow-hidden">
+        <div className="absolute inset-0 grid-bg opacity-60 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent to-background pointer-events-none" />
+        <div className="max-w-7xl mx-auto relative">
+          <p className="font-mono text-[9px] text-primary uppercase tracking-[0.3em] mb-4 flex items-center gap-2">
+            <span className="size-1 rounded-full bg-primary" />
+            Rankings
+          </p>
+          <h1 className="text-4xl sm:text-5xl md:text-6xl font-black uppercase tracking-tighter mb-4">
+            Elite <span className="text-primary">Traders</span>
+          </h1>
+          <p className="text-muted-foreground max-w-md text-sm leading-relaxed">
+            Ranked by verified ROI over the active season. Every result is on-chain verifiable.
+          </p>
         </div>
       </section>
-      <section className="py-16 px-6">
-        <div className="max-w-5xl mx-auto border border-border bg-surface overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="font-mono text-[10px] text-muted-foreground uppercase tracking-widest border-b border-border">
-              <tr>
-                <th className="p-4 w-16">Rank</th>
-                <th className="p-4">Trader</th>
-                <th className="p-4 text-right">Win Rate</th>
-                <th className="p-4 text-right hidden sm:table-cell">Net PnL</th>
-                <th className="p-4 text-right">ROI %</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/40">
-              {traders?.map((t) => (
-                <tr key={t.id} className="hover:bg-primary/5 transition-colors">
-                  <td className="p-4 font-mono font-bold">
-                    <span className={t.rank === 1 ? "text-primary text-glow" : "text-muted-foreground"}>
-                      {String(t.rank ?? "—").padStart(2, "0")}
-                    </span>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex items-center gap-3">
-                      <div className="size-10 rounded bg-background border border-border grid place-items-center font-mono text-xs text-primary font-bold">
-                        {t.handle.slice(0, 2).toUpperCase()}
-                      </div>
-                      <span className="font-bold uppercase tracking-wide">{t.handle}</span>
-                    </div>
-                  </td>
-                  <td className="p-4 text-right font-mono">{Number(t.win_rate).toFixed(1)}%</td>
-                  <td className="p-4 text-right font-mono text-primary hidden sm:table-cell">+${Number(t.total_pnl).toLocaleString()}</td>
-                  <td className="p-4 text-right font-mono text-primary font-bold">{fmtSigned(t.roi_percent)}</td>
+
+      {/* Table */}
+      <section className="py-14 px-4 sm:px-6">
+        <div className="max-w-5xl mx-auto">
+          <div className="border border-border/60 bg-surface overflow-hidden">
+            <table className="w-full text-left">
+              <thead className="font-mono text-[9px] text-muted-foreground uppercase tracking-widest border-b border-border/60 bg-background/60">
+                <tr>
+                  <th className="p-4 sm:p-5 w-16">Rank</th>
+                  <th className="p-4 sm:p-5">Trader</th>
+                  <th className="p-4 sm:p-5 text-right">Win Rate</th>
+                  <th className="p-4 sm:p-5 text-right hidden sm:table-cell">Net PnL</th>
+                  <th className="p-4 sm:p-5 text-right">ROI %</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border/30">
+                {traders?.map((t) => (
+                  <tr key={t.id} className="hover:bg-primary/[0.03] transition-colors group">
+                    <td className="p-4 sm:p-5 font-mono font-bold text-lg">
+                      {t.rank && t.rank <= 3
+                        ? medals[(t.rank ?? 1) - 1]
+                        : <span className="text-sm text-muted-foreground">{String(t.rank ?? "—").padStart(2, "0")}</span>
+                      }
+                    </td>
+                    <td className="p-4 sm:p-5">
+                      <div className="flex items-center gap-3">
+                        <div className="size-9 bg-background border border-border/60 grid place-items-center font-mono text-xs text-primary font-bold shrink-0 group-hover:border-primary/40 transition-colors">
+                          {t.handle.slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <p className="font-bold uppercase tracking-wide text-sm">{t.handle}</p>
+                          <p className="font-mono text-[9px] text-muted-foreground sm:hidden">{Number(t.win_rate).toFixed(1)}% win</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="p-4 sm:p-5 text-right font-mono text-sm text-muted-foreground">{Number(t.win_rate).toFixed(1)}%</td>
+                    <td className="p-4 sm:p-5 text-right font-mono text-sm text-primary hidden sm:table-cell">
+                      +${Number(t.total_pnl).toLocaleString()}
+                    </td>
+                    <td className="p-4 sm:p-5 text-right font-mono font-black text-primary">{fmtSigned(t.roi_percent)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!traders?.length && (
+              <p className="text-center py-16 text-muted-foreground font-mono text-sm">No traders yet.</p>
+            )}
+          </div>
         </div>
       </section>
+
       <SiteFooter />
     </div>
   );

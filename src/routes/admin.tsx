@@ -2,9 +2,12 @@ import { createFileRoute, Link, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useUser } from "@clerk/clerk-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteHeader } from "@/components/site-chrome";
 import { statusStyle, fmtSigned, type TradingCall, type Trader } from "@/lib/calls";
+import { fetchDexInfo } from "@/lib/dex";
+import { sendInvite } from "@/lib/invite";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -15,21 +18,19 @@ type Role = "admin" | "editor" | "viewer";
 
 function AdminPage() {
   const router = useRouter();
-  const [userId, setUserId] = useState<string | null>(null);
+  const { user, isLoaded } = useUser();
   const [roles, setRoles] = useState<Role[]>([]);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<"calls" | "traders" | "announcements" | "subscribers">("calls");
+  const [tab, setTab] = useState<"calls" | "traders" | "announcements" | "subscribers" | "invite">("calls");
 
   useEffect(() => {
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) { router.navigate({ to: "/auth" }); return; }
-      setUserId(session.user.id);
-      const { data: rolesData } = await supabase.from("user_roles").select("role").eq("user_id", session.user.id);
-      setRoles((rolesData ?? []).map(r => r.role as Role));
+    if (!isLoaded) return;
+    if (!user) { router.navigate({ to: "/auth" }); return; }
+    supabase.from("user_roles").select("role").eq("user_id", user.id).then(({ data }) => {
+      setRoles((data ?? []).map(r => r.role as Role));
       setChecking(false);
-    })();
-  }, [router]);
+    });
+  }, [isLoaded, user, router]);
 
   if (checking) return <div className="min-h-screen grid place-items-center text-muted-foreground font-mono text-xs uppercase">Authenticating…</div>;
 
@@ -39,13 +40,13 @@ function AdminPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">
       <SiteHeader />
-      <section className="py-12 px-6 border-b border-border">
+      <section className="py-8 px-4 sm:px-6 border-b border-border">
         <div className="max-w-7xl mx-auto flex justify-between items-end flex-wrap gap-4">
           <div>
             <p className="font-mono text-xs text-primary uppercase tracking-[0.3em] mb-2">/ admin terminal</p>
-            <h1 className="text-4xl font-black uppercase tracking-tighter">Control Panel</h1>
-            <p className="font-mono text-xs text-muted-foreground mt-2">
-              UID: <span className="text-foreground">{userId?.slice(0, 8)}…</span> &nbsp;|&nbsp;
+            <h1 className="text-3xl sm:text-4xl font-black uppercase tracking-tighter">Control Panel</h1>
+            <p className="font-mono text-xs text-muted-foreground mt-2 break-all">
+              UID: <span className="text-foreground">{user?.id?.slice(0, 8)}…</span> &nbsp;|&nbsp;
               Roles: <span className="text-primary">{roles.length ? roles.join(", ") : "none — request access"}</span>
             </p>
           </div>
@@ -61,16 +62,16 @@ function AdminPage() {
           </p>
           <pre className="bg-surface border border-border p-4 text-left font-mono text-xs text-primary overflow-x-auto">
 {`INSERT INTO public.user_roles (user_id, role)
-VALUES ('${userId}', 'admin');`}
+VALUES ('${user?.id}', 'admin');`}
           </pre>
           <Link to="/" className="inline-block mt-6 text-xs font-mono uppercase tracking-widest text-primary hover:underline">← Back to site</Link>
         </div>
       ) : (
-        <div className="max-w-7xl mx-auto px-6 py-10">
-          <div className="flex gap-2 mb-8 flex-wrap">
-            {(["calls", "traders", "announcements", "subscribers"] as const).map((t) => (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+          <div className="flex gap-2 mb-6 overflow-x-auto pb-1 scrollbar-none">
+            {(["calls", "traders", "announcements", "subscribers", "invite"] as const).map((t) => (
               <button key={t} onClick={() => setTab(t)}
-                className={`px-4 py-2 text-[11px] font-mono font-bold uppercase tracking-widest border ${tab === t ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
+                className={`shrink-0 px-4 py-2 text-[11px] font-mono font-bold uppercase tracking-widest border ${tab === t ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground"}`}>
                 {t}
               </button>
             ))}
@@ -79,6 +80,7 @@ VALUES ('${userId}', 'admin');`}
           {tab === "traders" && <TradersAdmin />}
           {tab === "announcements" && <AnnouncementsAdmin />}
           {tab === "subscribers" && (isAdmin ? <SubscribersAdmin /> : <p className="text-muted-foreground text-sm">Admin only.</p>)}
+          {tab === "invite" && (isAdmin ? <InviteAdmin /> : <p className="text-muted-foreground text-sm">Admin only.</p>)}
         </div>
       )}
     </div>
@@ -96,20 +98,53 @@ function CallsAdmin() {
     },
   });
 
-  const blank = { pair: "", direction: "LONG", leverage: "", entry_price: "", target_price: "", stop_loss: "", status: "ACTIVE", pnl_percent: "", notes: "" };
+  const blank = {
+    pair: "", direction: "LONG", entry_price: "", target_price: "",
+    status: "ACTIVE", pnl_percent: "", notes: "",
+    market_cap: "", potential: "", entry_zone: "", caller: "",
+    liquidity: "", volume_24h: "", ath: "", risk_level: "HIGH",
+    contract_address: "",
+  };
   const [form, setForm] = useState<Record<string, string>>(blank);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [fetching, setFetching] = useState(false);
+
+  async function autofillFromCA() {
+    if (!form.contract_address.trim()) return;
+    setFetching(true);
+    const info = await fetchDexInfo(form.contract_address.trim());
+    setFetching(false);
+    if (!info) { toast.error("No data found for this CA."); return; }
+    setForm(f => ({
+      ...f,
+      pair: f.pair || `${info.symbol}/SOL`,
+      market_cap: info.marketCap,
+      liquidity: info.liquidity,
+      volume_24h: info.volume24h,
+      entry_price: f.entry_price || String(info.price),
+    }));
+    toast.success(`Loaded: ${info.name} (${info.symbol})`);
+  }
 
   const save = useMutation({
     mutationFn: async () => {
       const payload = {
-        pair: form.pair, direction: form.direction, leverage: form.leverage || null,
+        pair: form.pair, direction: "LONG",
         entry_price: Number(form.entry_price),
         target_price: form.target_price ? Number(form.target_price) : null,
-        stop_loss: form.stop_loss ? Number(form.stop_loss) : null,
+        stop_loss: null,
         status: form.status,
         pnl_percent: form.pnl_percent ? Number(form.pnl_percent) : null,
         notes: form.notes || null,
+        market_cap: form.market_cap || null,
+        potential: form.potential || null,
+        entry_zone: form.entry_zone || null,
+        caller: form.caller || null,
+        liquidity: form.liquidity || null,
+        volume_24h: form.volume_24h || null,
+        ath: form.ath || null,
+        risk_level: form.risk_level || null,
+        contract_address: form.contract_address || null,
       };
       if (editingId) {
         const { error } = await supabase.from("trading_calls").update(payload).eq("id", editingId);
@@ -131,28 +166,54 @@ function CallsAdmin() {
   const startEdit = (c: TradingCall) => {
     setEditingId(c.id);
     setForm({
-      pair: c.pair, direction: c.direction, leverage: c.leverage ?? "",
+      pair: c.pair, direction: c.direction,
       entry_price: String(c.entry_price), target_price: c.target_price ? String(c.target_price) : "",
-      stop_loss: c.stop_loss ? String(c.stop_loss) : "", status: c.status,
+      status: c.status,
       pnl_percent: c.pnl_percent !== null ? String(c.pnl_percent) : "", notes: c.notes ?? "",
+      market_cap: c.market_cap ?? "", potential: c.potential ?? "",
+      entry_zone: c.entry_zone ?? "", caller: c.caller ?? "",
+      liquidity: c.liquidity ?? "",
+      volume_24h: c.volume_24h ?? "", ath: c.ath ?? "",
+      risk_level: c.risk_level ?? "HIGH",
+      contract_address: c.contract_address ?? "",
     });
   };
 
   return (
-    <div className="grid lg:grid-cols-[1fr_2fr] gap-8">
-      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="bg-surface border border-border p-6 space-y-3 h-fit sticky top-20">
+    <div className="grid lg:grid-cols-[1fr_2fr] gap-6">
+      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="bg-surface border border-border p-4 sm:p-6 space-y-3 h-fit lg:sticky lg:top-20">
         <h3 className="font-black uppercase tracking-tight mb-2">{editingId ? "Edit call" : "New call"}</h3>
+        <div>
+          <label className="block text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1">Solana CA</label>
+          <div className="flex gap-2">
+            <input
+              type="text" value={form.contract_address}
+              onChange={(e) => setForm({ ...form, contract_address: e.target.value })}
+              placeholder="Paste contract address…"
+              className="flex-1 bg-background border border-border px-3 py-2 font-mono text-xs focus:border-primary focus:outline-none"
+            />
+            <button type="button" onClick={autofillFromCA} disabled={fetching}
+              className="px-3 py-2 bg-primary text-primary-foreground font-black uppercase text-[10px] tracking-widest disabled:opacity-50 shrink-0">
+              {fetching ? "…" : "Fill"}
+            </button>
+          </div>
+        </div>
         <AdminInput label="Pair" value={form.pair} onChange={(v) => setForm({ ...form, pair: v })} required />
-        <AdminSelect label="Direction" value={form.direction} options={["LONG", "SHORT"]} onChange={(v) => setForm({ ...form, direction: v })} />
-        <AdminInput label="Leverage" value={form.leverage} onChange={(v) => setForm({ ...form, leverage: v })} placeholder="e.g. 10x" />
         <AdminInput label="Entry" type="number" step="any" value={form.entry_price} onChange={(v) => setForm({ ...form, entry_price: v })} required />
         <AdminInput label="Target" type="number" step="any" value={form.target_price} onChange={(v) => setForm({ ...form, target_price: v })} />
-        <AdminInput label="Stop loss" type="number" step="any" value={form.stop_loss} onChange={(v) => setForm({ ...form, stop_loss: v })} />
         <AdminSelect label="Status" value={form.status} options={["ACTIVE","PENDING","TARGET_HIT","STOPPED","CLOSED"]} onChange={(v) => setForm({ ...form, status: v })} />
         <AdminInput label="PnL %" type="number" step="any" value={form.pnl_percent} onChange={(v) => setForm({ ...form, pnl_percent: v })} />
+        <AdminInput label="Market Cap" value={form.market_cap} onChange={(v) => setForm({ ...form, market_cap: v })} placeholder="e.g. $420M" />
+        <AdminInput label="Potential" value={form.potential} onChange={(v) => setForm({ ...form, potential: v })} placeholder="e.g. 5-10x" />
+        <AdminInput label="Entry Zone" value={form.entry_zone} onChange={(v) => setForm({ ...form, entry_zone: v })} placeholder="e.g. 0.0000110 – 0.0000120" />
+        <AdminInput label="Caller" value={form.caller} onChange={(v) => setForm({ ...form, caller: v })} />
+        <AdminInput label="Liquidity" value={form.liquidity} onChange={(v) => setForm({ ...form, liquidity: v })} placeholder="e.g. $12M" />
+        <AdminInput label="Volume 24h" value={form.volume_24h} onChange={(v) => setForm({ ...form, volume_24h: v })} placeholder="e.g. $280M" />
+        <AdminInput label="ATH" value={form.ath} onChange={(v) => setForm({ ...form, ath: v })} placeholder="e.g. 0.00001716" />
+        <AdminSelect label="Risk Level" value={form.risk_level} options={["LOW","MEDIUM","HIGH"]} onChange={(v) => setForm({ ...form, risk_level: v })} />
         <div>
           <label className="block text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1">Notes</label>
-          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={3}
+          <textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} rows={2}
             className="w-full bg-background border border-border px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none" />
         </div>
         <div className="flex gap-2 pt-2">
@@ -169,17 +230,17 @@ function CallsAdmin() {
 
       <div className="space-y-2">
         {calls?.map((c) => (
-          <div key={c.id} className="bg-surface border border-border p-4 flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <span className={`px-2 py-1 text-[10px] font-mono font-bold uppercase border ${statusStyle(c.status)}`}>{c.status.replace("_"," ")}</span>
-              <div>
-                <p className="font-bold tracking-tight">{c.pair}</p>
-                <p className="font-mono text-[11px] text-muted-foreground">{c.direction} • Entry {c.entry_price} {c.pnl_percent !== null && <span className={Number(c.pnl_percent) >= 0 ? "text-primary" : "text-bear"}>{" "}{fmtSigned(c.pnl_percent)}</span>}</p>
+          <div key={c.id} className="bg-surface border border-border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className={`shrink-0 px-2 py-1 text-[10px] font-mono font-bold uppercase border ${statusStyle(c.status)}`}>{c.status.replace("_"," ")}</span>
+              <div className="min-w-0">
+                <p className="font-bold tracking-tight truncate">{c.pair}</p>
+                <p className="font-mono text-[11px] text-muted-foreground">Entry {c.entry_price} {c.pnl_percent !== null && <span className={Number(c.pnl_percent) >= 0 ? "text-primary" : "text-bear"}>{" "}{fmtSigned(c.pnl_percent)}</span>}</p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => startEdit(c)} className="px-3 py-1.5 text-[11px] font-mono uppercase border border-border hover:border-primary">Edit</button>
-              <button onClick={() => confirm("Delete this call?") && del.mutate(c.id)} className="px-3 py-1.5 text-[11px] font-mono uppercase border border-border hover:border-bear hover:text-bear">Delete</button>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => startEdit(c)} className="flex-1 sm:flex-none px-3 py-2 text-[11px] font-mono uppercase border border-border hover:border-primary">Edit</button>
+              <button onClick={() => confirm("Delete this call?") && del.mutate(c.id)} className="flex-1 sm:flex-none px-3 py-2 text-[11px] font-mono uppercase border border-border hover:border-bear hover:text-bear">Delete</button>
             </div>
           </div>
         ))}
@@ -226,8 +287,8 @@ function TradersAdmin() {
   });
 
   return (
-    <div className="grid lg:grid-cols-[1fr_2fr] gap-8">
-      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="bg-surface border border-border p-6 space-y-3 h-fit sticky top-20">
+    <div className="grid lg:grid-cols-[1fr_2fr] gap-6">
+      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="bg-surface border border-border p-4 sm:p-6 space-y-3 h-fit lg:sticky lg:top-20">
         <h3 className="font-black uppercase tracking-tight mb-2">{editingId ? "Edit trader" : "New trader"}</h3>
         <AdminInput label="Handle" value={form.handle} onChange={(v) => setForm({ ...form, handle: v })} required />
         <AdminInput label="Win rate %" type="number" step="any" value={form.win_rate} onChange={(v) => setForm({ ...form, win_rate: v })} />
@@ -239,17 +300,17 @@ function TradersAdmin() {
       </form>
       <div className="space-y-2">
         {traders?.map((t) => (
-          <div key={t.id} className="bg-surface border border-border p-4 flex items-center justify-between gap-4 flex-wrap">
-            <div className="flex items-center gap-4">
-              <span className="font-mono text-primary font-bold w-8">{String(t.rank ?? "—").padStart(2,"0")}</span>
-              <div>
-                <p className="font-bold uppercase tracking-wide">{t.handle}</p>
+          <div key={t.id} className="bg-surface border border-border p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="font-mono text-primary font-bold w-8 shrink-0">{String(t.rank ?? "—").padStart(2,"0")}</span>
+              <div className="min-w-0">
+                <p className="font-bold uppercase tracking-wide truncate">{t.handle}</p>
                 <p className="font-mono text-[11px] text-muted-foreground">Win {Number(t.win_rate).toFixed(1)}% • ROI {fmtSigned(t.roi_percent)}</p>
               </div>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => { setEditingId(t.id); setForm({ handle: t.handle, win_rate: String(t.win_rate), roi_percent: String(t.roi_percent), total_pnl: String(t.total_pnl), rank: t.rank ? String(t.rank) : "" }); }} className="px-3 py-1.5 text-[11px] font-mono uppercase border border-border hover:border-primary">Edit</button>
-              <button onClick={() => confirm("Delete?") && del.mutate(t.id)} className="px-3 py-1.5 text-[11px] font-mono uppercase border border-border hover:border-bear hover:text-bear">Delete</button>
+            <div className="flex gap-2 shrink-0">
+              <button onClick={() => { setEditingId(t.id); setForm({ handle: t.handle, win_rate: String(t.win_rate), roi_percent: String(t.roi_percent), total_pnl: String(t.total_pnl), rank: t.rank ? String(t.rank) : "" }); }} className="flex-1 sm:flex-none px-3 py-2 text-[11px] font-mono uppercase border border-border hover:border-primary">Edit</button>
+              <button onClick={() => confirm("Delete?") && del.mutate(t.id)} className="flex-1 sm:flex-none px-3 py-2 text-[11px] font-mono uppercase border border-border hover:border-bear hover:text-bear">Delete</button>
             </div>
           </div>
         ))}
@@ -277,7 +338,7 @@ function AnnouncementsAdmin() {
   });
   return (
     <div className="space-y-6 max-w-3xl">
-      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="bg-surface border border-border p-6 space-y-3">
+      <form onSubmit={(e) => { e.preventDefault(); save.mutate(); }} className="bg-surface border border-border p-4 sm:p-6 space-y-3">
         <h3 className="font-black uppercase tracking-tight">New announcement</h3>
         <AdminInput label="Title" value={title} onChange={setTitle} required />
         <div>
@@ -324,13 +385,36 @@ function SubscribersAdmin() {
   );
 }
 
+/* ---------- Invite ---------- */
+function InviteAdmin() {
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"admin" | "editor" | "viewer">("viewer");
+
+  const invite = useMutation({
+    mutationFn: () => sendInvite({ data: { email, role } }),
+    onSuccess: () => { toast.success(`Invite sent to ${email}`); setEmail(""); },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); invite.mutate(); }} className="bg-surface border border-border p-4 sm:p-6 space-y-3 max-w-sm w-full">
+      <h3 className="font-black uppercase tracking-tight">Invite user</h3>
+      <AdminInput label="Email" type="email" value={email} onChange={setEmail} required />
+      <AdminSelect label="Role" value={role} options={["admin", "editor", "viewer"]} onChange={(v) => setRole(v as typeof role)} />
+      <button type="submit" disabled={invite.isPending} className="w-full py-2 bg-primary text-primary-foreground font-black uppercase text-xs tracking-widest disabled:opacity-50">
+        Send Invite
+      </button>
+    </form>
+  );
+}
+
 /* ---------- shared inputs ---------- */
 function AdminInput({ label, value, onChange, type = "text", required, placeholder, step }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean; placeholder?: string; step?: string }) {
   return (
     <div>
       <label className="block text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1">{label}</label>
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} required={required} placeholder={placeholder} step={step}
-        className="w-full bg-background border border-border px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none" />
+        className="w-full bg-background border border-border px-3 py-2.5 font-mono text-sm focus:border-primary focus:outline-none" />
     </div>
   );
 }
@@ -338,7 +422,7 @@ function AdminSelect({ label, value, options, onChange }: { label: string; value
   return (
     <div>
       <label className="block text-[10px] font-mono uppercase tracking-widest text-muted-foreground mb-1">{label}</label>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-background border border-border px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full bg-background border border-border px-3 py-2.5 font-mono text-sm focus:border-primary focus:outline-none">
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
     </div>
